@@ -1,0 +1,11 @@
+# requirements.txt (recommended pins)
+fastapi>=0.110,<1.0           # Framework for APIs (like Spring Boot Web)
+pydantic[email]>=2.5,<3 	    # Validation + settings (like Jakarta Validation)
+uvicorn>=0.27,<1              # ASGI server (like Tomcat/Netty for Python)
+gunicorn>=21,<22              # WSGI server, good for production with workers
+sqlalchemy>=2.0,<3            # ORM (like JPA/Hibernate)
+httpx>=0.27,<1                # HTTP client (like OpenFeign/RestTemplate)
+pytest>=7,<9                  # Testing framework (like JUnit 5)
+flake8>=6,<8                  # Linter / code style checks (like Checkstyle/PMD)
+psycopg2-binary>=2.9,<3       # PostgreSQL driver (like MySQL Connector/J)
+python-dotenv>=1,<2           # Environment variable loader (.env)
