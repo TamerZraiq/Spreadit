@@ -16,11 +16,15 @@ def get_user(user_id: int):
             return u
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found") #if not found return 404
 
-@app.post("/api/users", status_code=status.HTTP_201_CREATED)
-def add_user(user: User):
-    if any(u.user_id == user.user_id for u in users): # to prevent duplicate user id's
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="user_id already exists")
-    users.append(user) # add new user to the users list
+@app.post("/sign-up", status_code=status.HTTP_201_CREATED)
+def sign_up(user: User):
+    if any(u.user_id == user.user_id for u in users):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User ID already exists")
+    if any(u.email == user.email for u in users):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already exists")
+    if any(u.username == user.username for u in users):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username already exists")
+    users.append(user)
     return user
 
 @app.put("/api/users/{user_id}", status_code=status.HTTP_200_OK)
