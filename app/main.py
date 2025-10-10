@@ -1,7 +1,7 @@
 # app/main.py
 from fastapi import FastAPI, HTTPException, status
 from pydantic import EmailStr
-from .schemas import User
+from .schemas import User, UserSignUp
 
 app = FastAPI()
 users: list[User] = []
@@ -18,16 +18,18 @@ def get_user(id: int):
             return u
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found") #if not found return 404
 
-@app.post("/sign-up", status_code=status.HTTP_201_CREATED)
-def sign_up(user: User):
+@app.post("/sign-up", status_code=status.HTTP_201_CREATED, response_model=User)
+def sign_up(user: UserSignUp):
     if any(u.user_id == user.user_id for u in users):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User ID already exists")
     if any(u.email == user.email for u in users):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already exists")
     if any(u.username == user.username for u in users):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username already exists")
-    users.append(user)
-    return user
+    id_sign_up = max([u.id for u in users], default=0) + 1
+    user_sign_up = User(id=id_sign_up, **user.model_dump())
+    users.append(user_sign_up)
+    return user_sign_up
 
 @app.post("/login", status_code=status.HTTP_200_OK)
 def login(email: EmailStr, password: str):
