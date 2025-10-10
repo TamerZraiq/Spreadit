@@ -10,4 +10,13 @@ class User(BaseModel):
     username: str
     password: str
     course_id: int
-    year: list[Literal[1, 2, 3, 4]] #Only allows 1, 2, 3, or 4
+    year: list[Literal[1, 2, 3, 4]]
+
+class UserSignUp(BaseModel):
+    user_id: constr(pattern=r'^g\d{8}$')
+    name: str
+    email: EmailStr
+    username: str
+    password: str
+    course_id: int
+    year: list[Literal[1, 2, 3, 4]]
