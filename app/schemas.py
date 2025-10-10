@@ -10,7 +10,7 @@ class User(BaseModel):
     username: str
     password: str
     course_id: int
-    year: list[Literal[1, 2, 3, 4]]
+    year: Literal[1, 2, 3, 4]
 
 class UserSignUp(BaseModel):
     user_id: constr(pattern=r'^g\d{8}$')
@@ -19,4 +19,4 @@ class UserSignUp(BaseModel):
     username: str
     password: str
     course_id: int
-    year: list[Literal[1, 2, 3, 4]]
+    year:Literal[1, 2, 3, 4]
