@@ -1,9 +1,13 @@
 # app/schemas.py
-from pydantic import BaseModel, EmailStr, constr, conint
+from pydantic import BaseModel, EmailStr, constr
+from typing import Literal
 
 class User(BaseModel):
-    user_id: int
-    student_id: constr(pattern=r'^S\d{7}$')
-    name: constr(min_length=2, max_length=50)
+    id: int
+    user_id: constr(pattern=r'^g\d{8}$')
+    name: str
     email: EmailStr
-    age: conint(gt=18)
+    username: str
+    password: str
+    course_id: int
+    year: list[Literal[1, 2, 3, 4]] #Only allows 1, 2, 3, or 4
