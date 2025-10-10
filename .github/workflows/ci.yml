@@ -19,5 +19,5 @@ jobs:
           python-version: '3.11'
       - name: Install dependencies
         run: pip install -r requirements.txt
-      - name: Run tests
-        run: pytest -q || echo "No tests yet, add some next lab!"
+      - name: Tests (pytest + coverage)
+        run: pytest --cov=app --cov-report=term-missing
