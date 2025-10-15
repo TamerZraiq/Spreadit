@@ -1,7 +1,7 @@
 # app/main.py
 from fastapi import FastAPI, HTTPException, status
 from pydantic import EmailStr
-from .schemas import User, UserSignUp
+from .schemas import User, UserSignUp, LoginRequest
 
 app = FastAPI()
 users: list[User] = []
@@ -32,10 +32,10 @@ def sign_up(user: UserSignUp):
     return user_sign_up
 
 @app.post("/login", status_code=status.HTTP_200_OK)
-def login(email: EmailStr, password: str):
-    if any(u.email == email and u.password == password for u in users):
+def login(request: LoginRequest):
+    if any(u.email == request.email and u.password == request.password for u in users):
         return {"message": "Login successful"}
-    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="FLASE TRY AGIAN GBOZo, Invalid Email or Password")
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Email or Password")
 
 
 @app.put("/api/users/{id}", status_code=status.HTTP_200_OK)
