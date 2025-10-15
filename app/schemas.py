@@ -20,3 +20,7 @@ class UserSignUp(BaseModel):
     password: str
     course_id: int
     year:Literal[1, 2, 3, 4]
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
