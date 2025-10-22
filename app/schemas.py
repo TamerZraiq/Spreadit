@@ -1,5 +1,5 @@
 # app/schemas.py
-from pydantic import BaseModel, EmailStr, constr
+from pydantic import BaseModel, EmailStr, constr, conint
 from typing import Literal
 
 class User(BaseModel):
@@ -10,7 +10,7 @@ class User(BaseModel):
     username: str
     password: str
     course_id: int
-    year: Literal[1, 2, 3, 4]
+    year: conint(ge=1, le=4)
 
 class UserSignUp(BaseModel):
     user_id: constr(pattern=r'^g\d{8}$')
@@ -19,7 +19,7 @@ class UserSignUp(BaseModel):
     username: str
     password: str
     course_id: int
-    year:Literal[1, 2, 3, 4]
+    year: conint(ge=1, le=4)
 
 class LoginRequest(BaseModel):
     email: EmailStr
