@@ -1,5 +1,5 @@
 # app/schemas.py
-from pydantic import BaseModel, EmailStr, constr, conint
+from pydantic import BaseModel, EmailStr, constr, conint, ConfigDict
 from typing import Literal
 
 class User(BaseModel):
@@ -11,6 +11,9 @@ class User(BaseModel):
     password: str
     course_id: int
     year: conint(ge=1, le=4)
+
+    model_config = ConfigDict(from_attributes=True)
+
 
 class UserSignUp(BaseModel):
     user_id: constr(pattern=r'^g\d{8}$')
