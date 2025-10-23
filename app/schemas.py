@@ -27,3 +27,12 @@ class UserSignUp(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+
+class UserUpdate(BaseModel):
+    user_id: constr(pattern=r'^g\d{8}$')
+    name: str
+    email: EmailStr
+    username: str
+    password: str
+    course_id: int
+    year: conint(ge=1, le=4)

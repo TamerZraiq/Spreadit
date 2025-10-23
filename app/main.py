@@ -2,11 +2,11 @@
 from fastapi import FastAPI, HTTPException, status,Depends
 from pydantic import EmailStr
 from sqlalchemy.orm import Session
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from .database import engine, SessionLocal
 from .models import Base, UserDB
-from .schemas import User, UserSignUp, LoginRequest
+from .schemas import User, UserSignUp, LoginRequest, UserUpdate
 
 app = FastAPI()
 users: list[User] = []
@@ -22,13 +22,13 @@ def get_db():
         db.close()
 
 #using db to get users
-@app.get("/api/users", response_model=list[User])
+@app.get("/api/all-users", response_model=list[User])
 def get_users(db: Session = Depends(get_db)):
     stmt = select(UserDB).order_by(UserDB.id)
     return list(db.execute(stmt).scalars())
 
-#getting users from the DB
-@app.post("/api/users", response_model=User, status_code=status.HTTP_201_CREATED)
+#signup
+@app.post("/api/sign-up", response_model=User, status_code=status.HTTP_201_CREATED)
 def add_user(payload: UserSignUp, db: Session = Depends(get_db)):
     user = UserDB(**payload.model_dump())
     db.add(user)
@@ -40,14 +40,47 @@ def add_user(payload: UserSignUp, db: Session = Depends(get_db)):
         raise HTTPException(status_code=409, detail="User already exists")
     return user
 
+#get user by user id from db
+@app.get("/api/user-by-userid/{user_id}", response_model=User)
+def get_user(user_id: str, db: Session = Depends(get_db)):
+    user = db.query(UserDB).filter(UserDB.user_id == user_id).first()
+    if not user: 
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found") #if not found return 404
+    return user
+
+#login to user in db
+@app.post("/api/login", status_code=status.HTTP_200_OK)
+def login(request: LoginRequest, db: Session = Depends(get_db)):
+    user = db.query(UserDB).filter(UserDB.email == request.email, UserDB.password == request.password).first() #query the db for any row or entry that has a matching email and password to the request one
+    if user:
+        return {"message": "Login successful"}
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Email or Password")
+
+#update a user by user id, still requires error catching 
+@app.put("/api/update-user-by-userid/{user_id}", status_code=status.HTTP_200_OK)
+def update_user(user_id: str, updated_user: UserUpdate, db: Session = Depends(get_db)):
+    result = db.query(UserDB).filter(UserDB.user_id == user_id).update(updated_user.model_dump())
+    db.commit()
+
+    if not result:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="id not found")
+
+    return {"message": "Updated User successful"}
+
+#delete user by user id
+@app.delete("/api/delete-user-by-userid/{user_id}", status_code=status.HTTP_200_OK)
+def delete_user(user_id: str, db: Session = Depends(get_db)):
+    user = db.query(UserDB).filter(UserDB.user_id == user_id).first()
+    db.delete(user)
+    db.commit()
+
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user_id not found")
+
+    return {"message": "Deleted User"}
+
 
 # ------------------------- Our Code -------------------------
-@app.get("/api/users/{id}")
-def get_user(id: int):
-    for u in users: # search for user by ID
-        if u.id == id:
-            return u
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found") #if not found return 404
 
 @app.post("/sign-up", status_code=status.HTTP_201_CREATED, response_model=User)
 def sign_up(user: UserSignUp):
@@ -61,29 +94,6 @@ def sign_up(user: UserSignUp):
     user_sign_up = User(id=id_sign_up, **user.model_dump())
     users.append(user_sign_up)
     return user_sign_up
-
-@app.post("/login", status_code=status.HTTP_200_OK)
-def login(request: LoginRequest):
-    if any(u.email == request.email and u.password == request.password for u in users):
-        return {"message": "Login successful"}
-    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Email or Password")
-
-
-@app.put("/api/users/{id}", status_code=status.HTTP_200_OK)
-def update_user(id: int, updated_user: User):
-    for i, u in enumerate(users): #find user by id and replace the updated user data
-        if u.id == id:
-            users[i] = updated_user
-            return updated_user 
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="id already exists") #if not found return 404
-
-@app.delete("/api/users/{id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_user(id: int):
-    for u in users: 
-        if u.id == id: # find user by id and delete from list
-            users.remove(u)
-            return u 
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="id not found")
     
 @app.get("/health") #health checkup function 
 def health():
