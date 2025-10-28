@@ -1,4 +1,30 @@
-import pytest
+import pytest 
+from fastapi.testclient import TestClient 
+from sqlalchemy import create_engine 
+from sqlalchemy.orm import sessionmaker 
+ 
+from app.main import app, get_db 
+from app.models import Base, UserDB
+from sqlalchemy.pool import StaticPool 
+ 
+TEST_DB_URL = "sqlite:///:memory:"
+engine = create_engine(TEST_DB_URL, connect_args={"check_same_thread": False}, poolclass=StaticPool) 
+TestingSessionLocal = sessionmaker(bind=engine, expire_on_commit=False) 
+Base.metadata.create_all(bind=engine) 
+ 
+@pytest.fixture 
+def client(): 
+    def override_get_db(): 
+        db = TestingSessionLocal() 
+        try: 
+            yield db 
+        finally: 
+            db.close() 
+    app.dependency_overrides[get_db] = override_get_db 
+    with TestClient(app) as c: 
+        # hand the client to the test 
+        yield c 
+        # --- teardown happens when the 'with' block exits --- 
 
 #Payload for testing
 def user_payload(id = 1, name = "Bob", email = "Bob@atu.ie", username = "LilBob", pw = "bob123", cid = 1,  year = 1, uid = "g00425076"):
@@ -21,7 +47,7 @@ def user_login_payload(email = "Bob@atu.ie", pw = "bob123"):
 
 #This tests signup successful
 def test_signup_ok(client): 
-    r = client.post("/sign-up", json=user_signup_payload()) 
+    r = client.post("/api/sign-up", json=user_signup_payload()) 
     assert r.status_code == 201 
     data = r.json() 
     assert data["id"] == 1 
@@ -35,41 +61,41 @@ def test_signup_ok(client):
      
 #This tests when duplicate user id occurs when signing up
 def test_duplicate_user_id_conflict(client): 
-    client.post("/sign-up", json=user_signup_payload()) 
-    r = client.post("/sign-up", json=second_user_payload(uid = "g00425076")) 
+    client.post("/api/sign-up", json=user_signup_payload()) 
+    r = client.post("/api/sign-up", json=second_user_payload(uid = "g00425076")) 
     assert r.status_code == 409 
-    assert "user id already exists" in r.json()["detail"].lower() 
+    assert "student id already exists" in r.json()["detail"].lower() 
 
 #This tests when duplicate email occurs when signing up
 def test_duplicate_email_conflict(client): 
-    client.post("/sign-up", json=user_signup_payload()) 
-    r = client.post("/sign-up", json=second_user_payload(email = "Bob@atu.ie")) 
+    client.post("/api/sign-up", json=user_signup_payload()) 
+    r = client.post("/api/sign-up", json=second_user_payload(email = "Bob@atu.ie")) 
     assert r.status_code == 409 
     assert "email already exists" in r.json()["detail"].lower() 
 
 #This tests when duplicate username occurs when signing up
 def test_duplicate_username_conflict(client): 
-    client.post("/sign-up", json=user_signup_payload()) 
-    r = client.post("/sign-up", json=second_user_payload(username = "LilBob"))
+    client.post("/api/sign-up", json=user_signup_payload()) 
+    r = client.post("/api/sign-up", json=second_user_payload(username = "LilBob"))
     assert r.status_code == 409 
     assert "username already exists" in r.json()["detail"].lower() 
 
 #This tests login successful
 def test_login_ok(client):
-    client.post("/sign-up", json=user_signup_payload()) 
-    r = client.post("/login", json=user_login_payload())
+    client.post("/api/sign-up", json=user_signup_payload()) 
+    r = client.post("/api/login", json=user_login_payload())
     assert r.status_code == 200 
 
 #This tests when login with wrong password
 def test_login_wrong_password(client):
-    client.post("/sign-up", json=user_signup_payload())
-    r = client.post("/login", json= user_login_payload(pw = "wrongpassword"))
+    client.post("/api/sign-up", json=user_signup_payload())
+    r = client.post("/api/login", json= user_login_payload(pw = "wrongpassword"))
     assert r.status_code == 401
     assert "invalid email or password" in r.json()["detail"].lower() 
 
 #This tests when login with wrong email
 def test_login_wrong_email(client):
-    client.post("/sign-up", json=user_signup_payload())
-    r = client.post("/login", json= user_login_payload(email = "wrongemail@atu.ie"))
+    client.post("/api/sign-up", json=user_signup_payload())
+    r = client.post("/api/login", json= user_login_payload(email = "wrongemail@atu.ie"))
     assert r.status_code == 401
     assert "invalid email or password" in r.json()["detail"].lower() 
