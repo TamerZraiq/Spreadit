@@ -27,19 +27,6 @@ def get_users(db: Session = Depends(get_db)):
     stmt = select(UserDB).order_by(UserDB.id)
     return list(db.execute(stmt).scalars())
 
-#signup
-@app.post("/api/sign-up", response_model=User, status_code=status.HTTP_201_CREATED)
-def add_user(payload: UserSignUp, db: Session = Depends(get_db)):
-    user = UserDB(**payload.model_dump())
-    db.add(user)
-    try:
-        db.commit()
-        db.refresh(user)
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status_code=409, detail="User already exists")
-    return user
-
 #get user by user id from db
 @app.get("/api/user-by-userid/{user_id}", response_model=User)
 def get_user(user_id: str, db: Session = Depends(get_db)):
@@ -81,19 +68,27 @@ def delete_user(user_id: str, db: Session = Depends(get_db)):
 
 
 # ------------------------- Our Code -------------------------
-
-@app.post("/sign-up", status_code=status.HTTP_201_CREATED, response_model=User)
-def sign_up(user: UserSignUp):
-    if any(u.user_id == user.user_id for u in users):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User ID already exists")
-    if any(u.email == user.email for u in users):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already exists")
-    if any(u.username == user.username for u in users):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username already exists")
-    id_sign_up = max([u.id for u in users], default=0) + 1
-    user_sign_up = User(id=id_sign_up, **user.model_dump())
-    users.append(user_sign_up)
-    return user_sign_up
+#signup
+@app.post("/api/sign-up", response_model=User, status_code=status.HTTP_201_CREATED)
+def add_user(payload: UserSignUp, db: Session = Depends(get_db)):
+    existing_user_id = db.query(UserDB).filter(UserDB.user_id == payload.user_id).first()
+    if existing_user_id:
+        raise HTTPException(status_code=409, detail="Student ID already exists")
+    existing_email = db.query(UserDB).filter(UserDB.email == payload.email).first()
+    if existing_email:
+        raise HTTPException(status_code=409, detail="Email already exists")
+    existing_username = db.query(UserDB).filter(UserDB.username == payload.username).first()
+    if existing_username:
+        raise HTTPException(status_code=409, detail="Username already exists")
+    user = UserDB(**payload.model_dump())
+    db.add(user)
+    try:
+        db.commit()
+        db.refresh(user)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="User already exists")
+    return user
     
 @app.get("/health") #health checkup function 
 def health():
