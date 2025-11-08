@@ -1,6 +1,6 @@
 import pytest 
 from fastapi.testclient import TestClient 
-from sqlalchemy import create_engine 
+from sqlalchemy import create_engine, event 
 from sqlalchemy.orm import sessionmaker 
  
 from app.main import app, get_db 
@@ -10,7 +10,17 @@ from sqlalchemy.pool import StaticPool
 TEST_DB_URL = "sqlite:///:memory:"
 engine = create_engine(TEST_DB_URL, connect_args={"check_same_thread": False}, poolclass=StaticPool) 
 TestingSessionLocal = sessionmaker(bind=engine, expire_on_commit=False) 
-Base.metadata.create_all(bind=engine) 
+ 
+
+@event.listens_for(engine, "connect") 
+def _fk_on(dbapi_conn, _): 
+    dbapi_conn.execute("PRAGMA foreign_keys=ON") 
+
+@pytest.fixture(autouse=True) 
+def _schema(): 
+    Base.metadata.create_all(bind=engine) 
+    yield 
+    Base.metadata.drop_all(bind=engine) 
  
 @pytest.fixture 
 def client(): 
@@ -24,7 +34,7 @@ def client():
     with TestClient(app) as c: 
         # hand the client to the test 
         yield c 
-        # --- teardown happens when the 'with' block exits --- 
+    app.dependency_overrides.clear() 
 
 #Payload for testing
 def user_payload(id = 1, name = "Bob", email = "Bob@atu.ie", username = "LilBob", pw = "bob123", cid = 1,  year = 1, uid = "g00425076"):

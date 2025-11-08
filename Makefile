@@ -10,4 +10,4 @@ run:
 
 
 test:
-	python -m pytest -q
+	python -m pytest -qs
