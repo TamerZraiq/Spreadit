@@ -1,17 +1,34 @@
 # app/main.py
-from fastapi import FastAPI, HTTPException, status,Depends
-from pydantic import EmailStr
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Depends, HTTPException, status, Response, Body
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from .database import engine, SessionLocal
+from sqlalchemy.orm import selectinload
+from app.database import engine, SessionLocal
 from .models import Base, UserDB
 from .schemas import User, UserSignUp, LoginRequest, UserUpdate
 
 app = FastAPI()
 users: list[User] = []
 
-Base.metadata.create_all(bind=engine) #create engine for DB
+# Replaces @app.on_event("startup")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    Base.metadata.create_all(bind=engine)
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
+
+# CORS (dev-friendly; tighten in production)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],     # specify domains in prod
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 #establish connection to db
 def get_db():
