@@ -75,11 +75,10 @@ def update_user(user_id: str, updated_user: UserUpdate, db: Session = Depends(ge
 @app.delete("/api/delete-user-by-userid/{user_id}", status_code=status.HTTP_200_OK)
 def delete_user(user_id: str, db: Session = Depends(get_db)):
     user = db.query(UserDB).filter(UserDB.user_id == user_id).first()
-    db.delete(user)
-    db.commit()
-
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user_id not found")
+    db.delete(user)
+    db.commit()
 
     return {"message": "Deleted User"}
 

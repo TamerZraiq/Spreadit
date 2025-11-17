@@ -52,6 +52,9 @@ def second_user_payload(name = "Alan", email = "Alan@atu.ie", username = "LilAla
 def user_login_payload(email = "Bob@atu.ie", pw = "bob123"):
     return {"email": email, "password": pw}
 
+def user_update_payload(name = "Alan", email = "Alan@atu.ie", username = "LilAlan", pw = "Alan123", cid = 1,  year = 1, uid = "g00425077"):
+    return {"user_id": uid, "name": name, "email": email, "username": username, "password": pw, "course_id": cid, "year": year}
+
 
 ##############################################################################################################################################
 
@@ -90,6 +93,8 @@ def test_duplicate_username_conflict(client):
     assert r.status_code == 409 
     assert "username already exists" in r.json()["detail"].lower() 
 
+
+
 #This tests login successful
 def test_login_ok(client):
     client.post("/api/sign-up", json=user_signup_payload()) 
@@ -109,3 +114,53 @@ def test_login_wrong_email(client):
     r = client.post("/api/login", json= user_login_payload(email = "wrongemail@atu.ie"))
     assert r.status_code == 401
     assert "invalid email or password" in r.json()["detail"].lower() 
+
+#This tests listing all the existing user
+def test_list_user_ok(client):
+    client.post("/api/sign-up", json=user_signup_payload())
+    r = client.get("/api/all-users")
+    assert r.status_code == 200
+    assert r.json() == [user_payload()]
+
+#This tests getting user by their user_id
+def test_get_user_by_id_ok(client):
+    client.post("/api/sign-up", json=user_signup_payload())
+    r = client.get("/api/user-by-userid/g00425076")
+    assert r.status_code == 200
+    assert r.json() == user_payload()
+
+#This tests when trying to get user by using the wrong user_id
+def test_get_user_by_id_not_found(client):
+    client.post("/api/sign-up", json=user_signup_payload())
+    #Wrong student ID here (should be g00425076)
+    r = client.get("/api/user-by-userid/g00425075")
+    assert r.status_code == 404
+    assert "user not found" in r.json()["detail"].lower()
+
+#This tests updating a user using their user-id
+def test_update_user_ok(client):
+    client.post("/api/sign-up", json=user_signup_payload())
+    r = client.put("/api/update-user-by-userid/g00425076", json=user_update_payload())
+    assert r.status_code == 200
+    assert "updated user successful" in r.json()["message"].lower() 
+
+#This tests when trying to update a user that doesn't exist
+def test_update_user_not_found(client):
+    client.post("/api/sign-up", json=user_signup_payload())
+    r = client.put("/api/update-user-by-userid/g00425075", json=user_update_payload())
+    assert r.status_code == 404
+    assert "id not found" in r.json()["detail"].lower() 
+
+#this tests deleting a user
+def test_delete_user_ok(client):
+    client.post("/api/sign-up", json=user_signup_payload())
+    r = client.delete("/api/delete-user-by-userid/g00425076")
+    assert r.status_code == 200
+    assert "deleted user" in r.json()["message"].lower() 
+
+#This tests when trying to delete a user that doesn't exist
+def test_delete_user_not_found(client):
+    client.post("/api/sign-up", json=user_signup_payload())
+    r = client.delete("/api/delete-user-by-userid/g00425075")
+    assert r.status_code == 404
+    assert "user_id not found" in r.json()["detail"].lower() 
