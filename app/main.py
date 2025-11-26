@@ -9,6 +9,10 @@ from sqlalchemy.orm import selectinload
 from app.database import engine, SessionLocal
 from .models import Base, UserDB
 from .schemas import User, UserSignUp, LoginRequest, UserUpdate
+import httpx
+import os
+
+COURSE_SERVICE_URL = os.getenv("COURSE_SERVICE_URL", "http://localhost:8000")
 
 app = FastAPI()
 users: list[User] = []
@@ -109,3 +113,10 @@ def add_user(payload: UserSignUp, db: Session = Depends(get_db)):
 @app.get("/health") #health checkup function 
 def health():
     return {"status" : "ok"}
+
+
+@app.get("/api/proxy/courses")
+def proxy_courses():
+    with httpx.Client() as client:
+        response = client.get(f"{COURSE_SERVICE_URL}/api/get-all-courses")
+    return response.json()
