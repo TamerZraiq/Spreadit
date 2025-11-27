@@ -13,6 +13,7 @@ import httpx
 import os
 
 COURSE_SERVICE_URL = os.getenv("COURSE_SERVICE_URL", "http://localhost:8000")
+POST_SERVICE_URL = os.getenv("POST_SERVICE_URL", "http://localhost:8000")
 
 app = FastAPI()
 users: list[User] = []
@@ -114,9 +115,14 @@ def add_user(payload: UserSignUp, db: Session = Depends(get_db)):
 def health():
     return {"status" : "ok"}
 
-
 @app.get("/api/proxy/courses")
 def proxy_courses():
     with httpx.Client() as client:
         response = client.get(f"{COURSE_SERVICE_URL}/api/get-all-courses")
+    return response.json()
+
+@app.get("/api/proxy/posts")
+def proxy_posts():
+    with httpx.Client() as client:
+        response = client.get(f"{POST_SERVICE_URL}/api/get-all-posts")
     return response.json()
