@@ -1,5 +1,5 @@
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-from sqlalchemy import String, Integer
+from sqlalchemy import String, Integer, Boolean
 
 class Base(DeclarativeBase):
     pass
@@ -15,3 +15,4 @@ class UserDB(Base):
     password: Mapped[str] = mapped_column(String, unique=False, nullable=False)
     course_id: Mapped[int] = mapped_column(Integer, nullable=False)
     year: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

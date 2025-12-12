@@ -1,27 +1,26 @@
 # app/schemas.py
 from pydantic import BaseModel, EmailStr, constr, conint, ConfigDict
-from typing import Literal
+from typing import Literal, Optional
 
 class User(BaseModel):
     id: int
-    user_id: constr(pattern=r'^g\d{8}$')
+    user_id: str
     name: str
     email: EmailStr
     username: str
     password: str
     course_id: int
     year: conint(ge=1, le=4)
+    is_admin: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class UserSignUp(BaseModel):
-    user_id: constr(pattern=r'^g\d{8}$')
     name: str
     email: EmailStr
     username: str
     password: str
-    course_id: int
     year: conint(ge=1, le=4)
 
 class LoginRequest(BaseModel):
@@ -29,10 +28,11 @@ class LoginRequest(BaseModel):
     password: str
 
 class UserUpdate(BaseModel):
-    user_id: constr(pattern=r'^g\d{8}$')
+    user_id: str
     name: str
     email: EmailStr
     username: str
     password: str
     course_id: int
     year: conint(ge=1, le=4)
+    is_admin: Optional[bool] = None
