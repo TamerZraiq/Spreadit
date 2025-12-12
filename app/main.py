@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from app.database import engine, SessionLocal
 from .models import Base, UserDB
 from .schemas import User, UserSignUp, LoginRequest, UserUpdate
+import httpx
 import os
 import aio_pika
 import json
@@ -151,7 +152,11 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(UserDB).filter(UserDB.email == request.email, UserDB.password == request.password).first() #query the db for any row or entry that has a matching email and password to the request one
     if user:
         await publish_event("user.login", {"user_id": user.user_id})
-        return {"message": "Login successful"}
+        return {
+            "message": "Login successful", 
+            "user_id": user.user_id,
+            "is_admin": user.is_admin
+        }
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Email or Password")
 
 #update a user by user id, still requires error catching 
@@ -183,21 +188,39 @@ async def delete_user(user_id: str, db: Session = Depends(get_db)):
 #signup
 @app.post("/api/sign-up", response_model=User, status_code=status.HTTP_201_CREATED)
 async def add_user(payload: UserSignUp, db: Session = Depends(get_db)):
-    existing_user_id = db.query(UserDB).filter(UserDB.user_id == payload.user_id).first()
-    if existing_user_id:
-        raise HTTPException(status_code=409, detail="Student ID already exists")
+    # Check for existing email and username
     existing_email = db.query(UserDB).filter(UserDB.email == payload.email).first()
     if existing_email:
         raise HTTPException(status_code=409, detail="Email already exists")
     existing_username = db.query(UserDB).filter(UserDB.username == payload.username).first()
     if existing_username:
         raise HTTPException(status_code=409, detail="Username already exists")
-    user = UserDB(**payload.model_dump())
+    
+    # Auto-generate user_id from email (use part before @)
+    user_id_base = payload.email.split('@')[0]
+    # Make it unique by appending a number if needed
+    user_id = user_id_base
+    counter = 1
+    while db.query(UserDB).filter(UserDB.user_id == user_id).first():
+        user_id = f"{user_id_base}{counter}"
+        counter += 1
+    
+    # Check if password is the admin password
+    ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "ADMIN2025")
+    is_admin = payload.password == ADMIN_PASSWORD
+    
+    # Create user data with auto-generated fields
+    user_data = payload.model_dump()
+    user_data["user_id"] = user_id
+    user_data["course_id"] = 0  # Default to 0 (no course assigned)
+    user_data["is_admin"] = is_admin
+    
+    user = UserDB(**user_data)
     db.add(user)
     try:
         db.commit()
         db.refresh(user)
-        await publish_event("user.created", {"user_id": user.user_id, "username": user.username})
+        await publish_event("user.created", {"user_id": user.user_id, "username": user.username, "is_admin": is_admin})
     except IntegrityError:
         db.rollback()
         raise HTTPException(status_code=409, detail="User already exists")
