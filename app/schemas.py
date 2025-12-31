@@ -12,6 +12,7 @@ class User(BaseModel):
     course_id: int
     year: conint(ge=1, le=4)
     is_admin: bool = False
+    enrolled_modules: list[int] = []
 
     model_config = ConfigDict(from_attributes=True)
 

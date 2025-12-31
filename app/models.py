@@ -1,5 +1,6 @@
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-from sqlalchemy import String, Integer, Boolean
+from sqlalchemy import String, Integer, Boolean, JSON
+from sqlalchemy.ext.mutable import MutableList
 
 class Base(DeclarativeBase):
     pass
@@ -16,3 +17,4 @@ class UserDB(Base):
     course_id: Mapped[int] = mapped_column(Integer, nullable=False)
     year: Mapped[int] = mapped_column(Integer, nullable=False)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    enrolled_modules: Mapped[list[int]] = mapped_column(MutableList.as_mutable(JSON), default=list)
