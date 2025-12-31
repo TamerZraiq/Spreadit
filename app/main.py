@@ -70,6 +70,104 @@ async def process_course_deleted(data: dict):
     finally:
         db.close()
 
+
+async def process_course_enrolled(data: dict):
+    user_id = data.get("user_id")
+    course_db_id = data.get("course_db_id")
+
+    if not user_id or course_db_id is None:
+        print("Invalid data for course enrollment")
+        return
+
+    print(f"Processing course enrollment: User {user_id} -> CourseDB {course_db_id}")
+    db = SessionLocal()
+    try:
+        user = db.query(UserDB).filter(UserDB.user_id == user_id).first()
+        if user:
+            user.course_id = course_db_id
+            db.commit()
+            print(f"Updated user {user_id} with course_id {course_db_id}")
+        else:
+            print(f"User {user_id} not found")
+    except Exception as e:
+        print(f"Error processing course enrollment: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+
+async def process_module_enrolled(data: dict):
+    user_id = data.get("user_id")
+    module_id = data.get("module_id")
+
+    if not user_id or module_id is None:
+        print("Invalid data for module enrollment")
+        return
+
+    print(f"Processing module enrollment: User {user_id} -> Module {module_id}")
+    db = SessionLocal()
+    try:
+        user = db.query(UserDB).filter(UserDB.user_id == user_id).first()
+        if user:
+            if user.enrolled_modules is None:
+                user.enrolled_modules = []
+            
+            if module_id not in user.enrolled_modules:
+                user.enrolled_modules.append(module_id)
+                # Force update for MutableList if needed, though append usually works with MutableList
+                from sqlalchemy.orm.attributes import flag_modified
+                flag_modified(user, "enrolled_modules")
+                
+                db.commit()
+                print(f"Enrolled user {user_id} in module {module_id}")
+            else:
+                print(f"User {user_id} already enrolled in module {module_id}")
+        else:
+            print(f"User {user_id} not found")
+    except Exception as e:
+        print(f"Error processing module enrollment: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+async def process_course_unenrolled(data: dict):
+    user_id = data.get("user_id")
+    course_db_id = data.get("course_db_id")
+    
+    db = SessionLocal()
+    try:
+        user = db.query(UserDB).filter(UserDB.user_id == user_id).first()
+        if user:
+            if user.course_id == course_db_id:
+                user.course_id = 0
+                db.commit()
+                print(f"Unenrolled user {user_id} from course {course_db_id}")
+    except Exception as e:
+        print(f"Error processing course unenrollment: {e}")
+        db.rollback()
+    finally:
+         db.close()
+
+async def process_module_unenrolled(data: dict):
+    user_id = data.get("user_id")
+    module_id = data.get("module_id")
+
+    db = SessionLocal()
+    try:
+        user = db.query(UserDB).filter(UserDB.user_id == user_id).first()
+        if user and user.enrolled_modules:
+            if module_id in user.enrolled_modules:
+                user.enrolled_modules.remove(module_id)
+                from sqlalchemy.orm.attributes import flag_modified
+                flag_modified(user, "enrolled_modules")
+                db.commit()
+                print(f"Unenrolled user {user_id} from module {module_id}")
+    except Exception as e:
+        print(f"Error processing module unenrollment: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
 async def consume_events():
     if not RABBIT_URL:
         print("RABBIT_URL not set, skipping consumer")
@@ -84,8 +182,12 @@ async def consume_events():
                 await channel.declare_exchange("events_topic", aio_pika.ExchangeType.TOPIC)
                 queue = await channel.declare_queue("user_service_queue", durable=True)
                 
-                # Bind to course.deleted
+                # Bind to course.deleted, course.enrolled, module.enrolled
                 await queue.bind("events_topic", routing_key="course.deleted")
+                await queue.bind("events_topic", routing_key="course.enrolled")
+                await queue.bind("events_topic", routing_key="module.enrolled")
+                await queue.bind("events_topic", routing_key="course.unenrolled")
+                await queue.bind("events_topic", routing_key="module.unenrolled")
                 
                 print("User Service Consumer Started")
                 
@@ -95,6 +197,14 @@ async def consume_events():
                             data = json.loads(message.body)
                             if message.routing_key == "course.deleted":
                                 await process_course_deleted(data)
+                            elif message.routing_key == "course.enrolled":
+                                await process_course_enrolled(data)
+                            elif message.routing_key == "module.enrolled":
+                                await process_module_enrolled(data)
+                            elif message.routing_key == "course.unenrolled":
+                                await process_course_unenrolled(data)
+                            elif message.routing_key == "module.unenrolled":
+                                await process_module_unenrolled(data)
 
         except asyncio.CancelledError:
             print("Consumer cancelled")
@@ -144,6 +254,13 @@ def get_user(user_id: str, db: Session = Depends(get_db)):
     user = db.query(UserDB).filter(UserDB.user_id == user_id).first()
     if not user: 
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found") #if not found return 404
+    return user
+
+@app.get("/api/user-by-db-id/{id}", response_model=User)
+def get_user_by_db_id(id: int, db: Session = Depends(get_db)):
+    user = db.get(UserDB, id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return user
 
 #login to user in db
