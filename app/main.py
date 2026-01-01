@@ -42,27 +42,27 @@ async def publish_event(routing_key: str, data: dict):
 
 async def process_course_deleted(data: dict):
     course_id = data.get("course_id")
-    if not course_id:
+    course_db_id = data.get("course_db_id")
+    
+    # Prefer DB ID
+    target_id = course_db_id if course_db_id else course_id
+    
+    if not target_id:
         return
 
-    print(f"Processing course deletion for course_id: {course_id}")
+    print(f"Processing course deletion for course_id: {course_id} (DB ID: {course_db_id})")
     db = SessionLocal()
     try:
-        # UserDB has course_id as Integer, but RabbitMQ payload might be string/int.
-        # Assuming we want to reset it to 0 or some default if the course is gone.
-        # Note: If course_id is "1", ensure we check types.
-        
-        # We try to cast to int, if fails, might not match anyway.
         try:
-            cid_int = int(course_id)
+            cid_int = int(target_id)
             users = db.query(UserDB).filter(UserDB.course_id == cid_int).all()
             for user in users:
                 user.course_id = 0 # 0 represents "No Course" or "Unassigned"
             
             db.commit()
-            print(f"Reset course_id for {len(users)} users who were in course {course_id}")
+            print(f"Reset course_id for {len(users)} users who were in course {target_id}")
         except ValueError:
-            print(f"Invalid course_id format received: {course_id}")
+            print(f"Invalid course_id format received: {target_id}")
             
     except Exception as e:
         print(f"Error processing course deletion in User Service: {e}")
@@ -168,6 +168,32 @@ async def process_module_unenrolled(data: dict):
     finally:
         db.close()
 
+async def process_module_deleted(data: dict):
+    module_id = data.get("module_id")
+    if module_id is None:
+        return
+
+    print(f"Processing module deletion for module_id: {module_id}")
+    db = SessionLocal()
+    try:
+        # Find users who have this module in their list
+        users = db.query(UserDB).filter(UserDB.enrolled_modules.contains([module_id])).all()
+        
+        for user in users:
+             if module_id in user.enrolled_modules:
+                 user.enrolled_modules.remove(module_id)
+                 from sqlalchemy.orm.attributes import flag_modified
+                 flag_modified(user, "enrolled_modules")
+        
+        db.commit()
+        print(f"Unenrolled {len(users)} users from deleted module {module_id}")
+            
+    except Exception as e:
+        print(f"Error processing module deletion in User Service: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
 async def consume_events():
     if not RABBIT_URL:
         print("RABBIT_URL not set, skipping consumer")
@@ -187,7 +213,9 @@ async def consume_events():
                 await queue.bind("events_topic", routing_key="course.enrolled")
                 await queue.bind("events_topic", routing_key="module.enrolled")
                 await queue.bind("events_topic", routing_key="course.unenrolled")
+                await queue.bind("events_topic", routing_key="course.unenrolled")
                 await queue.bind("events_topic", routing_key="module.unenrolled")
+                await queue.bind("events_topic", routing_key="module.deleted")
                 
                 print("User Service Consumer Started")
                 
@@ -205,6 +233,8 @@ async def consume_events():
                                 await process_course_unenrolled(data)
                             elif message.routing_key == "module.unenrolled":
                                 await process_module_unenrolled(data)
+                            elif message.routing_key == "module.deleted":
+                                await process_module_deleted(data)
 
         except asyncio.CancelledError:
             print("Consumer cancelled")
