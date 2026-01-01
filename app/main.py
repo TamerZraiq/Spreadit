@@ -15,6 +15,12 @@ import os
 import aio_pika
 import json
 import asyncio
+import pybreaker
+
+# Circuit Breaker Configuration
+# fail_max: Number of consecutive failures before opening the circuit
+# reset_timeout: Seconds to wait before attempting to close the circuit
+db_breaker = pybreaker.CircuitBreaker(fail_max=1, reset_timeout=60)
 
 COURSE_SERVICE_URL = os.getenv("COURSE_SERVICE_URL", "http://localhost:8000")
 POST_SERVICE_URL = os.getenv("POST_SERVICE_URL", "http://localhost:8000")
@@ -422,12 +428,39 @@ def health():
 
 @app.get("/api/proxy/courses")
 def proxy_courses():
-    with httpx.Client() as client:
-        response = client.get(f"{COURSE_SERVICE_URL}/api/get-all-courses")
-    return response.json()
+    try:
+        # Wrap the external call with the circuit breaker
+        @db_breaker
+        def call_course_service():
+            with httpx.Client() as client:
+                return client.get(f"{COURSE_SERVICE_URL}/api/get-all-courses")
+        
+        response = call_course_service()
+        return response.json()
+    except pybreaker.CircuitBreakerError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Course Service is currently unavailable (Circuit Breaker Open)"
+        )
+    except Exception as e:
+         # Fallback for other errors
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/proxy/posts")
 def proxy_posts():
-    with httpx.Client() as client:
-        response = client.get(f"{POST_SERVICE_URL}/api/get-all-posts")
-    return response.json()
+    try:
+         # Wrap the external call with the circuit breaker
+        @db_breaker
+        def call_post_service():
+             with httpx.Client() as client:
+                return client.get(f"{POST_SERVICE_URL}/api/get-all-posts")
+        
+        response = call_post_service()
+        return response.json()
+    except pybreaker.CircuitBreakerError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Post Service is currently unavailable (Circuit Breaker Open)"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
