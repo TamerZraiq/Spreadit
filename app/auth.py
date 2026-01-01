@@ -8,7 +8,6 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
-from app.database import get_db
 from app.models import UserDB
 
 # JWT configuration from environment variables
@@ -116,9 +115,23 @@ def decode_access_token(token: str) -> dict:
         )
 
 
+# Deferred import to avoid circular dependency
+def _get_db_dependency():
+    """Returns the get_db function from main, respecting test overrides"""
+    from app.main import get_db, app
+    # Check if there's an override (for testing)
+    if get_db in app.dependency_overrides:
+        override_func = app.dependency_overrides[get_db]
+        for db in override_func():
+            yield db
+    else:
+        for db in get_db():
+            yield db
+
+
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db)
+    db: Session = Depends(_get_db_dependency)
 ) -> UserDB:
     """
     Dependency to get the current authenticated user from JWT token.

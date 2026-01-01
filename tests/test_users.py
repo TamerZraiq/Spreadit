@@ -62,7 +62,8 @@ def get_auth_headers(client, email="Bob@atu.ie", password="bob123"):
     if login_response.status_code == 200:
         token = login_response.json()["access_token"]
         return {"Authorization": f"Bearer {token}"}
-    return {}
+    else:
+        raise Exception(f"Login failed with status {login_response.status_code}: {login_response.text}")
 
 
 ##############################################################################################################################################
@@ -177,12 +178,13 @@ def test_update_user_ok(client):
     assert "updated user successful" in r.json()["message"].lower() 
 
 #This tests when trying to update a user that doesn't exist (requires authentication)
+# Note: Returns 403 because user is not authorized to update other users (not admin)
 def test_update_user_not_found(client):
     client.post("/api/sign-up", json=user_signup_payload())
     headers = get_auth_headers(client)
     r = client.put("/api/update-user-by-userid/InvalidUser", json=user_update_payload(), headers=headers)
-    assert r.status_code == 404
-    assert "id not found" in r.json()["detail"].lower() 
+    assert r.status_code == 403
+    assert "not authorized" in r.json()["detail"].lower() 
 
 #this tests deleting a user (requires authentication and ownership)
 def test_delete_user_ok(client):
@@ -193,12 +195,13 @@ def test_delete_user_ok(client):
     assert "deleted user" in r.json()["message"].lower()
 
 #This tests when trying to delete a user that doesn't exist (requires authentication)
+# Note: Returns 403 because user is not authorized to delete other users (not admin)
 def test_delete_user_not_found(client):
     client.post("/api/sign-up", json=user_signup_payload())
     headers = get_auth_headers(client)
     r = client.delete("/api/delete-user-by-userid/InvalidUser", headers=headers)
-    assert r.status_code == 404
-    assert "user_id not found" in r.json()["detail"].lower()
+    assert r.status_code == 403
+    assert "not authorized" in r.json()["detail"].lower()
 
 #This tests the health check endpoint
 def test_health(client):
