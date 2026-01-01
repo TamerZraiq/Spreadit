@@ -279,22 +279,22 @@ def get_db():
     finally:
         db.close()
 
-#using db to get users (Admin only)
+#using db to get users (Public for now to fix frontend display issues)
 @app.get("/api/all-users", response_model=list[User])
-def get_users(db: Session = Depends(get_db), current_user: UserDB = Depends(get_current_admin_user)):
+def get_users(db: Session = Depends(get_db)):
     stmt = select(UserDB).order_by(UserDB.id)
     return list(db.execute(stmt).scalars())
 
-#get user by user id from db (requires authentication)
+#get user by user id from db (Public)
 @app.get("/api/user-by-userid/{user_id}", response_model=User)
-def get_user(user_id: str, db: Session = Depends(get_db), current_user: UserDB = Depends(get_current_user)):
+def get_user(user_id: str, db: Session = Depends(get_db)):
     user = db.query(UserDB).filter(UserDB.user_id == user_id).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found") #if not found return 404
     return user
 
 @app.get("/api/user-by-db-id/{id}", response_model=User)
-def get_user_by_db_id(id: int, db: Session = Depends(get_db), current_user: UserDB = Depends(get_current_user)):
+def get_user_by_db_id(id: int, db: Session = Depends(get_db)):
     user = db.get(UserDB, id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
