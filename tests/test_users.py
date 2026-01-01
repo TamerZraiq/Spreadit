@@ -1,10 +1,11 @@
-import pytest 
-from fastapi.testclient import TestClient 
-from sqlalchemy import create_engine, event 
-from sqlalchemy.orm import sessionmaker 
- 
-from app.main import app, get_db 
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, event
+from sqlalchemy.orm import sessionmaker
+
+from app.main import app, get_db
 from app.models import Base, UserDB
+from app.auth import verify_password
 from sqlalchemy.pool import StaticPool 
  
 TEST_DB_URL = "sqlite:///:memory:"
@@ -55,6 +56,14 @@ def user_login_payload(email = "Bob@atu.ie", pw = "bob123"):
 def user_update_payload(name = "Alan", email = "Alan@atu.ie", username = "LilAlan", pw = "Alan123", cid = 1,  year = 1, uid = "Bob", is_admin = False):
     return {"user_id": uid, "name": name, "email": email, "username": username, "password": pw, "course_id": cid, "year": year, "is_admin": is_admin}
 
+#Helper function to get auth headers after login
+def get_auth_headers(client, email="Bob@atu.ie", password="bob123"):
+    login_response = client.post("/api/login", json={"email": email, "password": password})
+    if login_response.status_code == 200:
+        token = login_response.json()["access_token"]
+        return {"Authorization": f"Bearer {token}"}
+    return {}
+
 
 ##############################################################################################################################################
 
@@ -68,7 +77,8 @@ def test_signup_ok(client):
     assert data["name"] == "Bob"
     assert data["email"] == "Bob@atu.ie"
     assert data["username"] == "LilBob"
-    assert data["password"] == "bob123"
+    # Password is now hashed, so verify it matches the original password
+    assert verify_password("bob123", data["password"])
     assert data["course_id"] == 0  # default value
     assert data["year"] == 1
     assert data["is_admin"] == False
@@ -100,9 +110,16 @@ def test_duplicate_username_conflict(client):
 
 #This tests login successful
 def test_login_ok(client):
-    client.post("/api/sign-up", json=user_signup_payload()) 
+    client.post("/api/sign-up", json=user_signup_payload())
     r = client.post("/api/login", json=user_login_payload())
-    assert r.status_code == 200 
+    assert r.status_code == 200
+    data = r.json()
+    # Check that JWT token is returned
+    assert "access_token" in data
+    assert "token_type" in data
+    assert data["token_type"] == "bearer"
+    assert data["user_id"] == "Bob"
+    assert data["is_admin"] == False 
 
 #This tests when login with wrong password
 def test_login_wrong_password(client):
@@ -118,53 +135,68 @@ def test_login_wrong_email(client):
     assert r.status_code == 401
     assert "invalid email or password" in r.json()["detail"].lower() 
 
-#This tests listing all the existing user
+#This tests listing all the existing user (requires admin authentication)
 def test_list_user_ok(client):
-    client.post("/api/sign-up", json=user_signup_payload())
-    r = client.get("/api/all-users")
+    # Sign up admin user
+    client.post("/api/sign-up", json=user_signup_payload(pw="ADMIN2025"))
+    # Get auth headers
+    headers = get_auth_headers(client, password="ADMIN2025")
+    r = client.get("/api/all-users", headers=headers)
     assert r.status_code == 200
-    assert r.json() == [user_payload()]
+    # Password will be hashed, so we can't do direct comparison
+    data = r.json()
+    assert len(data) == 1
+    assert data[0]["user_id"] == "Bob"
+    assert data[0]["email"] == "Bob@atu.ie"
 
-#This tests getting user by their user_id
+#This tests getting user by their user_id (requires authentication)
 def test_get_user_by_id_ok(client):
     client.post("/api/sign-up", json=user_signup_payload())
-    r = client.get("/api/user-by-userid/Bob")  # user_id is "Bob" from email
+    headers = get_auth_headers(client)
+    r = client.get("/api/user-by-userid/Bob", headers=headers)  # user_id is "Bob" from email
     assert r.status_code == 200
-    assert r.json() == user_payload()
+    data = r.json()
+    assert data["user_id"] == "Bob"
+    assert data["email"] == "Bob@atu.ie"
 
-#This tests when trying to get user by using the wrong user_id
+#This tests when trying to get user by using the wrong user_id (requires authentication)
 def test_get_user_by_id_not_found(client):
     client.post("/api/sign-up", json=user_signup_payload())
+    headers = get_auth_headers(client)
     #Wrong user_id here (should be "Bob")
-    r = client.get("/api/user-by-userid/InvalidUser")
+    r = client.get("/api/user-by-userid/InvalidUser", headers=headers)
     assert r.status_code == 404
     assert "user not found" in r.json()["detail"].lower()
 
-#This tests updating a user using their user-id
+#This tests updating a user using their user-id (requires authentication and ownership)
 def test_update_user_ok(client):
     client.post("/api/sign-up", json=user_signup_payload())
-    r = client.put("/api/update-user-by-userid/Bob", json=user_update_payload())
+    headers = get_auth_headers(client)
+    r = client.put("/api/update-user-by-userid/Bob", json=user_update_payload(), headers=headers)
     assert r.status_code == 200
     assert "updated user successful" in r.json()["message"].lower() 
 
-#This tests when trying to update a user that doesn't exist
+#This tests when trying to update a user that doesn't exist (requires authentication)
 def test_update_user_not_found(client):
     client.post("/api/sign-up", json=user_signup_payload())
-    r = client.put("/api/update-user-by-userid/InvalidUser", json=user_update_payload())
+    headers = get_auth_headers(client)
+    r = client.put("/api/update-user-by-userid/InvalidUser", json=user_update_payload(), headers=headers)
     assert r.status_code == 404
     assert "id not found" in r.json()["detail"].lower() 
 
-#this tests deleting a user
+#this tests deleting a user (requires authentication and ownership)
 def test_delete_user_ok(client):
     client.post("/api/sign-up", json=user_signup_payload())
-    r = client.delete("/api/delete-user-by-userid/Bob")
+    headers = get_auth_headers(client)
+    r = client.delete("/api/delete-user-by-userid/Bob", headers=headers)
     assert r.status_code == 200
     assert "deleted user" in r.json()["message"].lower()
 
-#This tests when trying to delete a user that doesn't exist
+#This tests when trying to delete a user that doesn't exist (requires authentication)
 def test_delete_user_not_found(client):
     client.post("/api/sign-up", json=user_signup_payload())
-    r = client.delete("/api/delete-user-by-userid/InvalidUser")
+    headers = get_auth_headers(client)
+    r = client.delete("/api/delete-user-by-userid/InvalidUser", headers=headers)
     assert r.status_code == 404
     assert "user_id not found" in r.json()["detail"].lower()
 
@@ -174,18 +206,21 @@ def test_health(client):
     assert r.status_code == 200
     assert r.json() == {"status": "ok"}
 
-#This tests getting user by database ID
+#This tests getting user by database ID (requires authentication)
 def test_get_user_by_db_id_ok(client):
     client.post("/api/sign-up", json=user_signup_payload())
-    r = client.get("/api/user-by-db-id/1")
+    headers = get_auth_headers(client)
+    r = client.get("/api/user-by-db-id/1", headers=headers)
     assert r.status_code == 200
     data = r.json()
     assert data["id"] == 1
     assert data["user_id"] == "Bob"
 
-#This tests getting user by database ID when not found
+#This tests getting user by database ID when not found (requires authentication)
 def test_get_user_by_db_id_not_found(client):
-    r = client.get("/api/user-by-db-id/999")
+    client.post("/api/sign-up", json=user_signup_payload())
+    headers = get_auth_headers(client)
+    r = client.get("/api/user-by-db-id/999", headers=headers)
     assert r.status_code == 404
     assert "user not found" in r.json()["detail"].lower()
 
@@ -209,6 +244,7 @@ def test_signup_duplicate_email_prefix(client):
 #This tests updating a user updates all fields correctly
 def test_update_user_changes_fields(client):
     client.post("/api/sign-up", json=user_signup_payload())
+    headers = get_auth_headers(client)
     # Update user with new data
     r = client.put("/api/update-user-by-userid/Bob", json=user_update_payload(
         name="UpdatedName",
@@ -217,15 +253,16 @@ def test_update_user_changes_fields(client):
         pw="newpass",
         cid=5,
         year=3
-    ))
+    ), headers=headers)
     assert r.status_code == 200
     # Verify the update
-    r = client.get("/api/user-by-userid/Bob")
+    r = client.get("/api/user-by-userid/Bob", headers=headers)
     data = r.json()
     assert data["name"] == "UpdatedName"
     assert data["email"] == "updated@atu.ie"
     assert data["username"] == "UpdatedUser"
-    assert data["password"] == "newpass"
+    # Password is hashed, so verify it matches
+    assert verify_password("newpass", data["password"])
     assert data["course_id"] == 5
     assert data["year"] == 3
 
@@ -356,10 +393,11 @@ def test_login_publishes_event(client):
 def test_update_user_publishes_event(client):
     from unittest.mock import patch, AsyncMock
     client.post("/api/sign-up", json=user_signup_payload())
+    headers = get_auth_headers(client)
 
     with patch('app.main.publish_event') as mock_publish:
         mock_publish.return_value = AsyncMock()
-        r = client.put("/api/update-user-by-userid/Bob", json=user_update_payload())
+        r = client.put("/api/update-user-by-userid/Bob", json=user_update_payload(), headers=headers)
         assert r.status_code == 200
         mock_publish.assert_called_once()
 
@@ -368,10 +406,11 @@ def test_update_user_publishes_event(client):
 def test_delete_user_publishes_event(client):
     from unittest.mock import patch, AsyncMock
     client.post("/api/sign-up", json=user_signup_payload())
+    headers = get_auth_headers(client)
 
     with patch('app.main.publish_event') as mock_publish:
         mock_publish.return_value = AsyncMock()
-        r = client.delete("/api/delete-user-by-userid/Bob")
+        r = client.delete("/api/delete-user-by-userid/Bob", headers=headers)
         assert r.status_code == 200
         mock_publish.assert_called_once()
 
